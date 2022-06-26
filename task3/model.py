@@ -89,11 +89,14 @@ class ESIM(nn.Module):
         batch_size = x1.size(0)
 
         attention = torch.matmul(x1, x2.transpose(1, 2))  # (batch, seq1_len, seq2_len)
+
+        # set mask
         mask1 = torch.arange(seq1_len).expand(batch_size, seq1_len).to(x1.device) >= x1_lens.unsqueeze(
             1)  # (batch, seq1_len), 1 means <pad>
         mask2 = torch.arange(seq2_len).expand(batch_size, seq2_len).to(x1.device) >= x2_lens.unsqueeze(
-            1)  # (batch, seq1_len), 1 means <pad>
-        mask1 = mask1.float().masked_fill_(mask1, float('-inf'))
+            1)  # (batch, seq2_len), 1 means <pad>
+        
+        mask1 = mask1.float().masked_fill_(mask1, float('-inf'))    # Fills elements of self tensor with value where mask is True
         mask2 = mask2.float().masked_fill_(mask2, float("-inf"))
         weight2 = F.softmax(attention + mask2.unsqueeze(1), dim=-1)  # (batch, seq1_len, seq2_len)
         x1_align = torch.matmul(weight2, x2)  # (batch, seq1_len, hidden_size)
@@ -102,10 +105,11 @@ class ESIM(nn.Module):
         return x1_align, x2_align
 
     def composition(self, x, lens):
+        # x: (batch, seq_len, 4*hidden_size)
         x = F.relu(self.fc1(x))
         x_compose = self.bilstm2(self.dropout(x), lens)  # (batch, seq_len, hidden_size)
-        p1 = F.avg_pool1d(x_compose.transpose(1, 2), x.size(1).squeeze(-1))  # (batch, hidden_size)
-        p2 = F.max_pool1d(x_compose.transpose(1, 2), x.size(1).squeeze(-1))  # (batch, hidden_size)
+        p1 = F.avg_pool1d(x_compose.transpose(1, 2), x.size(1)).squeeze(-1)  # (batch, hidden_size)
+        p2 = F.max_pool1d(x_compose.transpose(1, 2), x.size(1)).squeeze(-1)  # (batch, hidden_size)
         return torch.cat([p1, p2], 1)  # (batch, hidden_size*2)
 
     def forward(self, x1, x1_lens, x2, x2_lens):
@@ -120,7 +124,7 @@ class ESIM(nn.Module):
         embed1 = self.embed(x1)  # (batch, seq1_len, embed_size)
         embed2 = self.embed(x2)  # (batch, seq2_len, embed_size)
         new_embed1 = self.bilstm1(self.dropout(embed1), x1_lens)
-        new_embed2 = self.bilstm2(self.dropout(embed2), x2_lens)
+        new_embed2 = self.bilstm1(self.dropout(embed2), x2_lens)
 
         # Local inference collected over sequence
         x1_align, x2_align = self.soft_align_attention(new_embed1, x1_lens, new_embed2, x2_lens)
@@ -129,7 +133,7 @@ class ESIM(nn.Module):
         x1_combined = torch.cat([new_embed1, x1_align, new_embed1 - x1_align, new_embed1 * x1_align],
                                 dim=-1)  # (batch, seq1_len, 4*hidden_size)
         x2_combined = torch.cat([new_embed2, x2_align, new_embed2 - x2_align, new_embed2 * x2_align],
-                                dim=-1)  # (batch, seq1_len, 4*hidden_size)
+                                dim=-1)  # (batch, seq2_len, 4*hidden_size)
 
         # Inference  composition
         x1_composed = self.composition(x1_combined, x1_lens)    # (batch, 2*hidden_size), v=[v_avg; v_max]
