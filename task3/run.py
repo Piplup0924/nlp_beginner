@@ -92,7 +92,7 @@ def train(model, loss_func, train_iter, dev_iter, optimizer, epochs, patience=5,
             torch.nn.utils.clip_grad_norm_(model.parameters(), clip)
             optimizer.step()
         total_loss = total_loss / len(train_iter)
-        tqdm.write("Epoch: %d, Train Loss: %d" % (epoch + 1, total_loss))
+        tqdm.write("Epoch: %d, Train Loss: %.3f" % (epoch + 1, total_loss))
 
         acc = eval(model, loss_func, dev_iter, "Dev", epoch)
         if acc < best_acc:
