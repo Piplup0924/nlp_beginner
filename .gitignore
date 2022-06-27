@@ -16,3 +16,7 @@ task3/data/snli_1.0/snli_1.0_test.txt
 task3/data/snli_1.0/snli_1.0_train.jsonl
 task3/data/snli_1.0/snli_1.0_train.txt
 .gitignore
+task3/data/glove.840B.300d.txt.pt
+task3/__pycache__/model.cpython-37.pyc
+task3/__pycache__/util.cpython-37.pyc
+task3/best_model.ckpt

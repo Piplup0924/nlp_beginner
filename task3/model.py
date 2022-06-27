@@ -1,3 +1,4 @@
+from turtle import forward
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -24,24 +25,30 @@ class BiLSTM(nn.Module):
                 # This is the range of indices for our forget gates for each LSTM cell
                 p.data[self.hidden_size // 2: self.hidden_size] = 1
 
-    def forward(self, x, lens):
-        """
-        :param x: (batch, seq_len, input_size)
-        :param lens: (batch, )
-        :return: (batch, seq_len, hidden_size)
-        """
-        orderd_lens, index = lens.sort(descending=True)
-        ordered_x = x[index]
+    # def forward(self, x, lens):
+    #     """
+    #     :param x: (batch, seq_len, input_size)
+    #     :param lens: (batch, )
+    #     :return: (batch, seq_len, hidden_size)
+    #     """
+    #     orderd_lens, index = lens.sort(descending=True)
+    #     ordered_x = x[index]
 
-        packed_x = nn.utils.rnn.pack_padded_sequence(
-            ordered_x, orderd_lens, batch_first=True)
-        packed_output, _ = self.bilstm(packed_x)
-        output, _ = nn.utils.rnn.pad_packed_sequence(
-            packed_output, batch_first=True)
+    #     packed_x = nn.utils.rnn.pack_padded_sequence(
+    #         ordered_x, orderd_lens, batch_first=True)
+    #     packed_output, _ = self.bilstm(packed_x)
+    #     output, _ = nn.utils.rnn.pad_packed_sequence(
+    #         packed_output, batch_first=True)
 
-        recover_index = index.argsort()
-        recover_output = output[recover_index]
-        return recover_output
+    #     recover_index = index.argsort()
+    #     recover_output = output[recover_index]
+    #     return recover_output
+
+    def forward(self, x):
+
+        output, _ = self.bilstm(x)
+
+        return output
 
 
 class ESIM(nn.Module):
@@ -105,14 +112,46 @@ class ESIM(nn.Module):
         x2_align = torch.matmul(weight1, x1)  # (batch, seq2_len, hidden_size)
         return x1_align, x2_align
 
-    def composition(self, x, lens):
+    def composition(self, x):
         # x: (batch, seq_len, 4*hidden_size)
         x = F.relu(self.fc1(x))
-        x_compose = self.bilstm2(self.dropout(x), lens)  # (batch, seq_len, hidden_size)
+        x_compose = self.bilstm2(self.dropout(x))  # (batch, seq_len, hidden_size)
         p1 = F.avg_pool1d(x_compose.transpose(1, 2), x.size(1)).squeeze(-1)  # (batch, hidden_size)
         p2 = F.max_pool1d(x_compose.transpose(1, 2), x.size(1)).squeeze(-1)  # (batch, hidden_size)
         return torch.cat([p1, p2], 1)  # (batch, hidden_size*2)
 
+    # def forward(self, x1, x1_lens, x2, x2_lens):
+    #     """
+    #     :param x1: (batch, seq1_len)
+    #     :param x1_len: (batch, )
+    #     :param x2: (batch, seq2_len)
+    #     :param x2_len: (batch, )
+    #     :return: (batch, num_class)
+    #     """
+    #     # input encoding
+    #     embed1 = self.embed(x1)  # (batch, seq1_len, embed_size)
+    #     embed2 = self.embed(x2)  # (batch, seq2_len, embed_size)
+    #     new_embed1 = self.bilstm1(self.dropout(embed1), x1_lens)
+    #     new_embed2 = self.bilstm1(self.dropout(embed2), x2_lens)
+
+    #     # Local inference collected over sequence
+    #     x1_align, x2_align = self.soft_align_attention(new_embed1, x1_lens, new_embed2, x2_lens)
+
+    #     # Enhancement of local inference information
+    #     x1_combined = torch.cat([new_embed1, x1_align, new_embed1 - x1_align, new_embed1 * x1_align],
+    #                             dim=-1)  # (batch, seq1_len, 4*hidden_size)
+    #     x2_combined = torch.cat([new_embed2, x2_align, new_embed2 - x2_align, new_embed2 * x2_align],
+    #                             dim=-1)  # (batch, seq2_len, 4*hidden_size)
+
+    #     # Inference  composition
+    #     x1_composed = self.composition(x1_combined, x1_lens)  # (batch, 2*hidden_size), v=[v_avg; v_max]
+    #     x2_composed = self.composition(x2_combined, x2_lens)  # (batch, 2*hidden_size)
+    #     composed = torch.cat([x1_composed, x2_composed], -1)  # (batch, 4*hidden_size)
+
+    #     # MLP classifier
+    #     out = self.fc3(self.dropout(torch.tanh(self.fc2(self.dropout(composed)))))
+    #     return out
+    
     def forward(self, x1, x1_lens, x2, x2_lens):
         """
         :param x1: (batch, seq1_len)
@@ -124,8 +163,8 @@ class ESIM(nn.Module):
         # input encoding
         embed1 = self.embed(x1)  # (batch, seq1_len, embed_size)
         embed2 = self.embed(x2)  # (batch, seq2_len, embed_size)
-        new_embed1 = self.bilstm1(self.dropout(embed1), x1_lens)
-        new_embed2 = self.bilstm1(self.dropout(embed2), x2_lens)
+        new_embed1 = self.bilstm1(self.dropout(embed1))
+        new_embed2 = self.bilstm1(self.dropout(embed2))
 
         # Local inference collected over sequence
         x1_align, x2_align = self.soft_align_attention(new_embed1, x1_lens, new_embed2, x2_lens)
@@ -137,8 +176,8 @@ class ESIM(nn.Module):
                                 dim=-1)  # (batch, seq2_len, 4*hidden_size)
 
         # Inference  composition
-        x1_composed = self.composition(x1_combined, x1_lens)  # (batch, 2*hidden_size), v=[v_avg; v_max]
-        x2_composed = self.composition(x2_combined, x2_lens)  # (batch, 2*hidden_size)
+        x1_composed = self.composition(x1_combined)  # (batch, 2*hidden_size), v=[v_avg; v_max]
+        x2_composed = self.composition(x2_combined)  # (batch, 2*hidden_size)
         composed = torch.cat([x1_composed, x2_composed], -1)  # (batch, 4*hidden_size)
 
         # MLP classifier

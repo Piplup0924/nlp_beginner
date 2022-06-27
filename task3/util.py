@@ -5,11 +5,12 @@ import torch
 
 
 def read_snli(data_dir, name):
-    # 将SNLI数据集解析为前提、假设和标签
+    """Read the SNLI dataset into premises, hypotheses, and labels."""
     def extract_text(s):
+        # Remove information that will not be used by us
         s = re.sub("\\(", '', s)
         s = re.sub("\\)", '', s)
-        # 用一个空格替换两个或多个连续的空格
+        # Substitute two or more consecutive whitespace with space
         s = re.sub("\\s{2,}", ' ', s)
         return s.strip()
 
@@ -96,7 +97,7 @@ def truncate_pad(line, num_steps, padding_token):
 
 
 class SNLIDataset(torch.utils.data.Dataset):
-    """用于加载SNLI数据集"""
+    """A customized dataset to load the SNLI dataset."""
 
     def __init__(self, dataset, num_steps, vocab=None):
         self.num_steps = num_steps
@@ -107,15 +108,25 @@ class SNLIDataset(torch.utils.data.Dataset):
         else:
             self.vocab = vocab
         self.premises = self._pad(all_premise_tokens)
+        self.premises_len = self._len(all_premise_tokens)
         self.hypotheses = self._pad(all_hypothesis_tokens)
+        self.hypotehses_len = self._len(all_hypothesis_tokens)
         self.labels = torch.tensor(dataset[2])
         print('read ' + str(len(self.premises)) + ' examples')
 
     def _pad(self, lines):
         return torch.tensor([truncate_pad(self.vocab[line], self.num_steps, self.vocab['<pad>']) for line in lines])
 
+    def _len(self, lines):
+        return [len(line) for line in lines]
+
     def __getitem__(self, idx):
-        return (self.premises[idx], self.hypotheses[idx]), self.labels[idx]
+        premise = self.premises[idx]
+        premise_len = self.premises_len[idx]
+        hypothesis = self.hypotheses[idx]
+        hypothesis_len = self.hypotehses_len[idx]
+        label = self.labels[idx]
+        return (premise, hypothesis), (premise_len, hypothesis_len), label
 
     def __len__(self):
         return len(self.premises)
