@@ -45,7 +45,7 @@ class BiLSTM(nn.Module):
 
 
 class ESIM(nn.Module):
-    def __init__(self, vocab_size, num_labels, embed_size, hidden_size, dropout_rate=0.1, layer_num=1, \
+    def __init__(self, vocab_size, num_labels, embed_size, hidden_size, dropout_rate=0.1, layer_num=1,
                  pretrained_embed=None, freeze=False):
         super(ESIM, self).__init__()
         self.pretrained_embed = pretrained_embed
@@ -95,8 +95,9 @@ class ESIM(nn.Module):
             1)  # (batch, seq1_len), 1 means <pad>
         mask2 = torch.arange(seq2_len).expand(batch_size, seq2_len).to(x1.device) >= x2_lens.unsqueeze(
             1)  # (batch, seq2_len), 1 means <pad>
-        
-        mask1 = mask1.float().masked_fill_(mask1, float('-inf'))    # Fills elements of self tensor with value where mask is True
+
+        mask1 = mask1.float().masked_fill_(mask1,
+                                           float('-inf'))  # Fills elements of self tensor with value where mask is True
         mask2 = mask2.float().masked_fill_(mask2, float("-inf"))
         weight2 = F.softmax(attention + mask2.unsqueeze(1), dim=-1)  # (batch, seq1_len, seq2_len)
         x1_align = torch.matmul(weight2, x2)  # (batch, seq1_len, hidden_size)
@@ -136,9 +137,9 @@ class ESIM(nn.Module):
                                 dim=-1)  # (batch, seq2_len, 4*hidden_size)
 
         # Inference  composition
-        x1_composed = self.composition(x1_combined, x1_lens)    # (batch, 2*hidden_size), v=[v_avg; v_max]
-        x2_composed = self.composition(x2_combined, x2_lens)    # (batch, 2*hidden_size)
-        composed = torch.cat([x1_composed, x2_composed], -1)    # (batch, 4*hidden_size)
+        x1_composed = self.composition(x1_combined, x1_lens)  # (batch, 2*hidden_size), v=[v_avg; v_max]
+        x2_composed = self.composition(x2_combined, x2_lens)  # (batch, 2*hidden_size)
+        composed = torch.cat([x1_composed, x2_composed], -1)  # (batch, 4*hidden_size)
 
         # MLP classifier
         out = self.fc3(self.dropout(torch.tanh(self.fc2(self.dropout(composed)))))
